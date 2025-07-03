@@ -17,6 +17,21 @@ A high-performance, thread-safe message broker using a custom lock-free ring buf
 - `main.cpp`: Demo with latency logging and multithreaded test
 - `LatencyTest`: Measures publish-to-consume latency
 
+## Benchmark Results (Single Producer & 2 Consumers, 10,000 messages)
+
+*Measured using high-resolution timestamps (nanoseconds) from `publish()` to `consume()`:*
+
+| Metric | Value (ns)    | Value (ms) |
+|--------|---------------|------------|
+| Total  | 10,000        | –          |
+| Min    | 785,000       | 0.79 ms    |
+| Median | 15,912,000    | 15.91 ms   |
+| P95    | 17,844,000    | 17.84 ms   |
+| P99    | 19,068,000    | 19.07 ms   |
+| Max    | 50,939,000    | 50.94 ms   |
+| Average| 13,071,898    | 13.07 ms   |
+
+
 ## How to Run
 
 ```bash
