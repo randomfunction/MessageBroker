@@ -77,14 +77,14 @@ int main() {
     broker.subscribe(1, 1002);
 
     auto producer = [&broker]() {
-        for (int i = 0; i < 10; ++i) {
+        for (int i = 0; i < 10; i++) {
             broker.publish(1, 1, "msg_" + to_string(i));
             this_thread::sleep_for(milliseconds(100));
         }
     };
 
     auto consumer = [&broker](int64_t id) {
-        for (int i = 0; i < 10; ++i) {
+        for (int i = 0; i < 10; i++) {
             Message msg;
             if (broker.consume(1, id, msg)) {
                 cout << "Consumer " << id << " got: " << msg.payload
