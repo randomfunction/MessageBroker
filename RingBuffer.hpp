@@ -5,7 +5,6 @@
 #include <cstddef>
 
 template<typename T, size_t Size>
-
 class RingBuffer{
     private:
     std::atomic<size_t> head;
@@ -14,10 +13,9 @@ class RingBuffer{
 
     public:
     RingBuffer(){
-        head.store(0);   // READ (DEQUEUE)
-        tail.store(0);   // WRITE (ENQUE)   
+        head.store(0);  // READ (DEQUEUE)
+        tail.store(0);  // WRITE (ENQUE)   
     }
-
 
     bool push(T item){  
         size_t t= tail.load(std::memory_order_relaxed);
@@ -36,7 +34,7 @@ class RingBuffer{
         size_t h= head.load(std::memory_order_relaxed);
         size_t t= tail.load(std::memory_order_acquire);
 
-        if(h==t) return false;
+        if(h==t) return false; // EMPTY
         item= buffer[h];
         head.store((h+1)%Size, std::memory_order_release);
         return true;
@@ -53,13 +51,6 @@ class RingBuffer{
     size_t capacity(){
         return Size;
     }
-
-    // size_t Size(){
-    //     size_t h= head.load(std::memory_order_relaxed);
-    //     size_t t= tail.load(std::memory_order_acquire);
-    //     return (t-h+Size)%Size;
-    // }
 };
-
 
 #endif // RINGBUFFER_HPP

@@ -1,108 +1,87 @@
-#include <bits/stdc++.h>
-#include <chrono>
-#include <mutex>
-#include <thread>
+#include "messagebroker.hpp"
+#include <iostream>
+#include <cstring>
 
-#include "RingBuffer.hpp"
+void MessageBroker::subscribe(int64_t topic_id, int64_t consumer_id) {
+    std::shared_ptr<TopicData> topic_data;
+    {
+        std::lock_guard<std::mutex> lock(map_mtx);
+        if (topics.find(topic_id) == topics.end()) {
+            topics[topic_id] = std::make_shared<TopicData>();
+        }
+        topic_data = topics[topic_id];
+    }
 
-using namespace std;
-using namespace chrono;
-
-/// MESSAGE STRUCTURE
-struct Message {
-    int64_t type;
-    string payload;
-    uint64_t timestamp; // HIGH PRECISION, LARGE RANGE, UNSIGNED
-};
-
-// TIMESTAMP
-uint64_t _timestamp() {
-    return duration_cast<nanoseconds>(
-               high_resolution_clock::now().time_since_epoch())
-        .count();
+    std::lock_guard<std::mutex> lock(topic_data->topic_mtx);
+    topic_data->subscribers.try_emplace(consumer_id);
 }
 
-class MessageBroker {
-private:
-    // MUTEX
-    mutex mtx;
+void MessageBroker::publish(int64_t type, int64_t topic_id, const std::string& data) {
+    std::shared_ptr<TopicData> topic_data;
+    {
+        std::lock_guard<std::mutex> lock(map_mtx);
+        auto it = topics.find(topic_id);
+        if (it == topics.end()) {
+            return; 
+        }
+        topic_data = it->second;
+    } 
 
-    // SUBSCRIBER QUEUE: TOPIC -> (CONSUMER ID -> FIFO RingBuffer)
-    unordered_map<int64_t, unordered_map<int64_t, RingBuffer<Message, 1024>>> subscriberQueue;
+    Message msg;
+    msg.type = type;
+    msg.timestamp = getCurrentTimestamp();
+    strncpy(msg.payload, data.c_str(), sizeof(msg.payload) - 1);
+    msg.payload[sizeof(msg.payload) - 1] = '\0'; 
 
-public:
-    //SUBSCRIBE
-    void subscribe(int64_t topic, int64_t consumer_id) {
-        lock_guard<mutex> lock(mtx);
-        auto &map = subscriberQueue[topic];
-        // try_emplace avoids ambiguous pair constructor
-        map.try_emplace(consumer_id); // default-construct RingBuffer
+    std::lock_guard<std::mutex> lock(topic_data->topic_mtx);
+    for (auto& pair : topic_data->subscribers) {
+        if (!pair.second.push(msg)) {
+            std::cerr << "[WARN] Buffer is full for consumer " << pair.first << " on topic " << topic_id << std::endl;
+        }
+    }
+}
+
+bool MessageBroker::consume(int64_t topic_id, int64_t consumer_id, Message& out) {
+    std::shared_ptr<TopicData> topic_data;
+    {
+        std::lock_guard<std::mutex> lock(map_mtx);
+        auto it = topics.find(topic_id);
+        if (it == topics.end()) {
+            return false;
+        }
+        topic_data = it->second;
+    } 
+
+    std::lock_guard<std::mutex> lock(topic_data->topic_mtx);
+    auto consumer_it = topic_data->subscribers.find(consumer_id);
+    if (consumer_it != topic_data->subscribers.end()) {
+        return consumer_it->second.pop(out);
+    }
+    return false;
+}
+
+bool MessageBroker::consume_batch(int64_t topic_id, int64_t consumer_id, std::vector<Message>& out, size_t max_items) {
+    out.clear();
+    std::shared_ptr<TopicData> topic_data;
+    {
+        std::lock_guard<std::mutex> lock(map_mtx);
+        auto it = topics.find(topic_id);
+        if (it == topics.end()) {
+            return false;
+        }
+        topic_data = it->second;
     }
 
-    //PUBLISH
-    void publish(int64_t type, int64_t topic, const string &data) {
-        lock_guard<mutex> lock(mtx);
-        Message msg{type, data, _timestamp()};
-        auto it = subscriberQueue.find(topic);
-        if (it != subscriberQueue.end()) {
-            for (auto &kv : it->second) {
-                kv.second.push(msg);
-            }
+    out.reserve(max_items);
+
+    std::lock_guard<std::mutex> lock(topic_data->topic_mtx);
+    auto consumer_it = topic_data->subscribers.find(consumer_id);
+    if (consumer_it != topic_data->subscribers.end()) {
+        Message msg;
+        while (max_items-- > 0 && consumer_it->second.pop(msg)) {
+            out.push_back(msg);
         }
-        cout << "topic " << topic
-             << " msg=" << msg.payload
-             << " type=" << msg.type
-             << " timestamp=" << msg.timestamp << endl;
+        return !out.empty();
     }
-
-    //CONSUME
-    bool consume(int64_t topic, int64_t consumer_id, Message &out) {
-        lock_guard<mutex> lock(mtx);
-        auto t_it = subscriberQueue.find(topic);
-        if (t_it != subscriberQueue.end()) {
-            auto &map = t_it->second;
-            auto c_it = map.find(consumer_id);
-            if (c_it != map.end()) {
-                return c_it->second.pop(out);
-            }
-        }
-        return false;
-    }
-};
-
-int main() {
-    MessageBroker broker;
-
-    broker.subscribe(1, 1001);
-    broker.subscribe(1, 1002);
-
-    auto producer = [&broker]() {
-        for (int i = 0; i < 10; ++i) {
-            broker.publish(1, 1, "msg_" + to_string(i));
-            this_thread::sleep_for(milliseconds(100));
-        }
-    };
-
-    auto consumer = [&broker](int64_t id) {
-        for (int i = 0; i < 10; ++i) {
-            Message msg;
-            if (broker.consume(1, id, msg)) {
-                cout << "Consumer " << id << " got: " << msg.payload
-                     << " at " << msg.timestamp << endl;
-            } else {
-                cout << "Consumer " << id << " has no message" << endl;
-            }
-            this_thread::sleep_for(milliseconds(150));
-        }
-    };
-
-    thread t1(producer);
-    thread t2(consumer, 1001);
-    thread t3(consumer, 1002);
-
-    t1.join();
-    t2.join();
-    t3.join();
-
-    return 0;
+    return false;
 }
