@@ -1,0 +1,2 @@
+/usr/bin/ar qc libmessagebroker.a CMakeFiles/messagebroker.dir/messagebroker.cpp.o
+/usr/bin/ranlib libmessagebroker.a

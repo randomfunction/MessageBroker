@@ -1,0 +1,1 @@
+/usr/bin/c++ CMakeFiles/LatencyTest.dir/LatencyTest.cpp.o -o LatencyTest  libmessagebroker.a 

@@ -1,0 +1,1 @@
+/usr/bin/c++ CMakeFiles/main_test.dir/main_test.cpp.o -o main_test  libmessagebroker.a 
