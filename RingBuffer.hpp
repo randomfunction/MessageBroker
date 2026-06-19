@@ -4,11 +4,13 @@
 #include <atomic>
 #include <cstddef>
 
+using namespace std;
+
 template<typename T, size_t Size>
 class RingBuffer{
     private:
-    std::atomic<size_t> head;
-    std::atomic<size_t> tail;
+    atomic<size_t> head;
+    atomic<size_t> tail;
     T buffer[Size];
 
     public:
@@ -18,34 +20,34 @@ class RingBuffer{
     }
 
     bool push(T item){  
-        size_t t= tail.load(std::memory_order_relaxed);
-        size_t h= head.load(std::memory_order_acquire);
+        size_t t= tail.load(memory_order_relaxed);
+        size_t h= head.load(memory_order_acquire);
 
         if(((t+1)% Size)==h){
             return false; // FULL
         }
 
         buffer[t]= item;
-        tail.store((t+1)%Size, std::memory_order_release);
+        tail.store((t+1)%Size, memory_order_release);
         return true;
     }
 
     bool pop(T &item){
-        size_t h= head.load(std::memory_order_relaxed);
-        size_t t= tail.load(std::memory_order_acquire);
+        size_t h= head.load(memory_order_relaxed);
+        size_t t= tail.load(memory_order_acquire);
 
         if(h==t) return false; // EMPTY
         item= buffer[h];
-        head.store((h+1)%Size, std::memory_order_release);
+        head.store((h+1)%Size, memory_order_release);
         return true;
     }
 
     bool empty(){
-        return head.load(std::memory_order_relaxed) == tail.load(std::memory_order_relaxed);
+        return head.load(memory_order_relaxed) == tail.load(memory_order_relaxed);
     }
 
     bool full(){
-        return ((tail.load(std::memory_order_relaxed)+1)%Size)==head.load(std::memory_order_relaxed);
+        return ((tail.load(memory_order_relaxed)+1)%Size)==head.load(memory_order_relaxed);
     }
 
     size_t capacity(){

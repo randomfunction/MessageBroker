@@ -1,30 +1,24 @@
+# Low-Latency Message Broker
 
-# Low-Latency C++ Message Broker
+A highly concurrent, thread-safe message broker optimized for low-latency communication. The architecture utilizes fine-grained locking and a wait-free Single-Producer Single-Consumer (SPSC) queue to maximize throughput and minimize latency on the critical path.
 
-A high-performance, thread-safe message broker designed for low-latency applications. This project combines a fine-grained locking strategy with an underlying lock-free SPSC ring buffer to achieve high concurrency and throughput. It incorporates several techniques common in High-Frequency Trading (HFT) systems to minimize latency on the critical path.
+## Design Decisions
 
-## Features
+1. **Lock-Free Queuing**: The core messaging mechanism is implemented via an atomic, wait-free ring buffer. This prevents priority inversion and thread contention during high-throughput message processing.
+2. **Fine-Grained Locking**: Concurrency control uses a per-topic mutex. This isolation ensures operations on distinct topics do not block each other, facilitating horizontal scalability.
+3. **Zero-Allocation Critical Path**: Dynamic memory allocation is strictly avoided during message publishing and consumption. Messages are structured with fixed-size payload buffers.
+4. **Hardware Optimization**: Features CPU affinity capabilities to pin producer and consumer threads to specific cores, reducing CPU cache misses and operating system context switching overhead.
+5. **Non-Blocking Polling**: Message consumers utilize cooperative yielding to maintain responsive consumption channels without blocking the execution thread.
 
-  - **Fine-Grained Locking**: Uses a per-topic mutex, allowing different topics to be accessed concurrently without contention.
-  - **Lock-Free SPSC Queue**: Employs a wait-free, single-producer, single-consumer ring buffer for the underlying message queue.
-  - **Allocation-Free Critical Path**: Messages use a fixed-size payload (`char[]`) to eliminate dynamic memory allocation (`new`/`delete`) during publish or consume operations.
-  - **CPU Affinity**: Includes logic to pin producer and consumer threads to specific CPU cores, reducing cache misses and OS context switching.
-  - **Low-Latency Polling**: Uses `std::this_thread::yield()` for responsive, non-blocking message consumption.
-  - **Nanosecond Benchmarking**: A dedicated latency test measures end-to-end performance with high precision.
+## Implementation Details
 
-## Components
+* **`MessageBroker`**: Manages topics and subscriber mappings, implementing the primary API for subscribing, publishing, and consuming messages. Includes support for batch consumption.
+* **`RingBuffer`**: A templated queue utilizing atomic variables with memory order acquisition and release semantics for thread-safe operations.
+* **`LatencyTest`**: A dedicated benchmarking utility that measures end-to-end publish-to-consume latency with nanosecond precision.
 
-  - `ringbuffer.hpp`: The header for the lock-free SPSC ring buffer.
-  - `message_broker.hpp`: The interface for the `MessageBroker` class.
-  - `message_broker.cpp`: The implementation of the `MessageBroker`'s methods.
-  - `main_test.cpp`: A simple functional test demonstrating basic publish/subscribe functionality.
-  - `latency_test.cpp`: A high-performance benchmark that measures publish-to-consume latency.
+## Performance Benchmarks
 
-## Benchmark Results
-
-The following results were captured on a standard consumer machine and are subject to OS jitter. For true low-latency, a real-time kernel or kernel-level core isolation (`isolcpus`) would be required to minimize the maximum latency spikes.
-
-*Test Parameters: 1 Producer, 1 Consumer, 50,000 Messages*
+*Test Parameters: 1 Producer, 1 Consumer, 50,000 Messages on a single machine.*
 
 | Metric | Value (ns) | Value (µs) |
 | :--- | ---: | ---: |
@@ -34,30 +28,27 @@ The following results were captured on a standard consumer machine and are subje
 | P99 | 307,000 | 307.0 |
 | Max | 52,688,000 | 52,688.0 |
 
-## How to Build and Run
+*Note: Results are subject to OS jitter. For strict real-time constraints, kernel-level core isolation (`isolcpus`) is recommended.*
 
-You will need a C++ compiler that supports C++17 (e.g., g++ or Clang).
+## Build Instructions
 
-### 1\. Run the Functional Test
-
-This test demonstrates the basic producer-consumer logic with console output.
+The project uses CMake for build configuration. A C++ compiler supporting the C++17 standard is required.
 
 ```bash
-# Compile
-g++ main_test.cpp message_broker.cpp -o main_test -std=c++17 -pthread -O3
-
-# Run
-./main_test
+mkdir build
+cd build
+cmake -DCMAKE_BUILD_TYPE=Release ..
+cmake --build .
 ```
 
-### 2\. Run the Latency Benchmark
+### Executables
 
-This test measures performance and should be run without other CPU-intensive applications in the background for best results.
+1. **`main_test`**: Validates basic producer-consumer correctness and routing.
+   ```bash
+   ./main_test
+   ```
 
-```bash
-# Compile
-g++ latency_test.cpp message_broker.cpp -o latency_test -std=c++17 -pthread -O3
-
-# Run
-./latency_test
-```
+2. **`LatencyTest`**: Executes the high-performance benchmark suite.
+   ```bash
+   ./LatencyTest
+   ```
